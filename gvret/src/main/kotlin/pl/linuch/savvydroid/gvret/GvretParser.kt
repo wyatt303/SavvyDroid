@@ -30,6 +30,18 @@ class GvretParser {
 
     private var state = State.IDLE
 
+    /**
+     * Count of bytes/commands the parser had to discard to stay
+     * resynced: a garbage byte seen outside any command, an
+     * unrecognized (out-of-MVP-scope) command id, or an invalid
+     * length|bus byte. Exposed for the UI's "dropped frames/parse
+     * errors" counter (see the MVP spec's "Live view" requirement) --
+     * NOT incremented for anything else, e.g. a successfully decoded
+     * frame with a non-zero checksum byte is not an error.
+     */
+    var errorCount: Long = 0
+        private set
+
     // Scratch accumulated while decoding a command-0 frame.
     private val scratch = ByteArray(8 + 4 + 1) // ts(4) + id(4) + lenbus(1) — enough for the fixed prefix
     private var scratchPos = 0
@@ -56,8 +68,11 @@ class GvretParser {
         val u = b.toInt() and 0xFF
         when (state) {
             State.IDLE -> {
-                if (u == 0xF1) state = State.GOT_PREFIX
-                // else: garbage byte outside any command, just drop it.
+                if (u == 0xF1) {
+                    state = State.GOT_PREFIX
+                } else {
+                    errorCount++ // garbage byte outside any command
+                }
             }
 
             State.GOT_PREFIX -> {
@@ -76,6 +91,7 @@ class GvretParser {
                         // its length, so we can't skip it safely. Drop back
                         // to IDLE and resync on the next 0xF1 — see
                         // docs/PROTOCOL.md "Resync".
+                        errorCount++
                         state = State.IDLE
                     }
                 }
@@ -99,6 +115,7 @@ class GvretParser {
                     // Nibble allows up to 15 but real CAN data is 0..8;
                     // treat anything larger as a desynced stream rather
                     // than trust it and read garbage as "data".
+                    errorCount++
                     state = State.IDLE
                     return
                 }

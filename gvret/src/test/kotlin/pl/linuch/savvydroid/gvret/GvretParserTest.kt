@@ -208,4 +208,24 @@ class GvretParserTest {
         val events = GvretParser().feed(ByteArray(0))
         assertEquals(0, events.size)
     }
+
+    @Test
+    fun `errorCount tracks garbage bytes, unrecognized commands, and invalid length, not valid frames`() {
+        val parser = GvretParser()
+        assertEquals(0L, parser.errorCount)
+
+        parser.feed(byteArrayOf(0x00, 0xAB.toByte())) // 2 garbage bytes outside any command
+        assertEquals(2L, parser.errorCount)
+
+        parser.feed(byteArrayOf(0xF1.toByte(), 0x07)) // unrecognized command id
+        assertEquals(3L, parser.errorCount)
+
+        val real = rawFrame(timestampUs = 1u, rawId = 0x10u, bus = 0, data = byteArrayOf(1))
+        parser.feed(real)
+        assertEquals(3L, parser.errorCount) // a valid frame must not bump the error count
+
+        val corruptLenBus = byteArrayOf(0xF1.toByte(), 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0x0F)
+        parser.feed(corruptLenBus)
+        assertEquals(4L, parser.errorCount)
+    }
 }
