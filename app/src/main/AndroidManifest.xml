@@ -8,6 +8,24 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+    <!--
+      Required alongside FOREGROUND_SERVICE_CONNECTED_DEVICE above: since
+      Android 14 (API 34), starting a foregroundServiceType="connectedDevice"
+      service also requires the app to hold at least one of a specific
+      "anyOf" permission set (CHANGE_NETWORK_STATE / CHANGE_WIFI_STATE /
+      CHANGE_WIFI_MULTICAST_STATE / NFC / TRANSMIT_IR, or a granted
+      runtime BLUETOOTH_CONNECT/ADVERTISE/SCAN/UWB_RANGING, or a USB
+      permission grant). NEARBY_WIFI_DEVICES above is NOT on that list,
+      confirmed against developer.android.com/develop/background-work/
+      services/fgs/service-types. Without one of these, startForeground()
+      throws immediately (MissingForegroundServiceTypeException-family
+      crash on service start, before any UI interaction), reproduced via
+      `adb shell monkey` crashing the app within seconds of launch, no
+      Connect/record/marker tap needed. CHANGE_WIFI_STATE is "normal"
+      protection level (auto-granted at install, no runtime prompt) and
+      fits what this app actually does (WiFi-connected CAN capture).
+    -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
     <application
         android:allowBackup="true"
