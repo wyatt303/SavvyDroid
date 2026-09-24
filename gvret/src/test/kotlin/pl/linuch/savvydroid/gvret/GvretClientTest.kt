@@ -62,6 +62,28 @@ class GvretClientTest {
     }
 
     @Test
+    fun `garbage bytes from the device surface as a ParserErrors event`() = runBlocking {
+        FakeGvretServer().use { server ->
+            val client = GvretClient(host = "127.0.0.1", port = server.port)
+            val serverConn = async(ioPool) {
+                val conn = server.accept()
+                conn.readNBytes(2)
+                conn.readNBytes(10)
+                conn.sendRaw(byteArrayOf(0x00, 0xAB.toByte())) // 2 garbage bytes -> errorCount=2
+                conn.sendFrame(GvretFrame(timestampUs = 1L, id = 0x10, extended = false, bus = 0, data = byteArrayOf(1)))
+                conn
+            }
+
+            val events = withTimeout(5000) { client.run().take(2).toList() }
+            assertTrue(events[0] is GvretEvent.ParserErrors)
+            assertEquals(2L, (events[0] as GvretEvent.ParserErrors).totalErrorCount)
+            assertTrue(events[1] is GvretEvent.Frame)
+
+            serverConn.await().close()
+        }
+    }
+
+    @Test
     fun `keepalive replies keep the connection alive across several intervals`() = runBlocking {
         FakeGvretServer().use { server ->
             val client = GvretClient(

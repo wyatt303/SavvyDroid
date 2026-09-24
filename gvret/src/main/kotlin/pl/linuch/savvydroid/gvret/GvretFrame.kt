@@ -49,4 +49,12 @@ data class GvretFrame(
 sealed interface GvretEvent {
     data class Frame(val frame: GvretFrame) : GvretEvent
     data object KeepAliveReply : GvretEvent
+
+    /**
+     * The parser's cumulative [GvretParser.errorCount] as of this point
+     * in the stream, emitted whenever it changes. Not emitted on every
+     * chunk -- only when the count actually moved, so this is cheap to
+     * collect for a UI counter without polling.
+     */
+    data class ParserErrors(val totalErrorCount: Long) : GvretEvent
 }

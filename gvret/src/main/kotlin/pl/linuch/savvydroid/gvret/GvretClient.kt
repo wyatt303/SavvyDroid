@@ -86,6 +86,7 @@ class GvretClient(
 
         val readJob = launch(Dispatchers.IO) {
             val buf = ByteArray(4096)
+            var lastReportedErrors = 0L
             try {
                 while (isActive) {
                     val n = input.read(buf)
@@ -93,7 +94,16 @@ class GvretClient(
                         close()
                         return@launch
                     }
-                    for (event in parser.feed(buf.copyOf(n))) {
+                    val decoded = parser.feed(buf.copyOf(n))
+                    // Report an error-count bump before the events from this
+                    // same chunk, since (within the wire format) any
+                    // discarded bytes that caused it necessarily occurred
+                    // earlier in the stream than a frame completed afterward.
+                    if (parser.errorCount != lastReportedErrors) {
+                        lastReportedErrors = parser.errorCount
+                        trySend(GvretEvent.ParserErrors(lastReportedErrors))
+                    }
+                    for (event in decoded) {
                         if (event is GvretEvent.KeepAliveReply) missedKeepAlives.set(0)
                         trySend(event)
                     }
