@@ -68,27 +68,51 @@ image with JDK 17 + Android SDK platform 35 / build-tools 35.0.0 works —
 
 The debug APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
 
-## Flashing ESP32S3RET
+## Flashing an ESP32 GVRET device
 
-1. Firmware source: <https://github.com/collin80/ESP32S3RET> (same
-   protocol/config as ESP32RET, just targeting the S3 chip — see
-   `docs/PROTOCOL.md` for which parts of this doc were verified against
-   which repo).
-2. Build/flash with PlatformIO (Arduino IDE also works per the
-   firmware's own README, but PlatformIO avoids the manual "Minimal
-   SPIFFS partition scheme" step PlatformIO's `platformio.ini` already
-   encodes):
-   ```bash
-   pio run -t upload
-   ```
-   (Or, container-based, the same pattern used for this project's sibling
-   MotoCAN firmware repo: build a PlatformIO image, mount the firmware
-   checkout, `pio run -t upload` with the ESP32-S3 connected via USB.)
-3. First boot creates its own WiFi access point — default SSID
-   `ESP32RETSSID` (or `A0RETSSID` on some boards), default WPA2 password
-   `aBigSecret`. This is enough to connect immediately without any
-   configuration: join that AP from your phone, the device is reachable
-   at `192.168.4.1` (ESP32 SoftAP default).
+Correction from an earlier draft of this README: there is no
+`collin80/ESP32S3RET` repo — that URL 404s. "ESP32S3RET" is a
+community fork, not an official collin80 project. Two real options,
+depending on your hardware:
+
+- **Plain ESP32 (e.g. EVTV ESP32Due, Macchina A0)**: firmware source
+  <https://github.com/collin80/ESP32RET> (`docs/PROTOCOL.md` was
+  reverse-engineered from this repo's source directly). The easiest
+  path for this board is the **official precompiled flasher**:
+  <https://www.savvycan.com/ESP32RET_Updater.zip> — a zip with the
+  firmware `.bin`s already built plus `updater.command`/`updater.bat`,
+  no PlatformIO/Arduino toolchain needed at all. Confirmed live (7.8MB,
+  contains `ESP32RET.bin`, `bootloader_qio_80m.bin`, `partitions.bin`,
+  and the updater scripts) — also linked from savvycan.com's own
+  downloads section.
+- **ESP32-S3 boards**: use the community fork
+  <https://github.com/MagnusThome/ESP32S3RET> instead — same GVRET
+  protocol/config commands as upstream, but with classic Bluetooth
+  removed (the S3 chip only has BLE) and FastLED disabled (compile
+  issue on S3). No precompiled binary for this one; build/flash it
+  yourself with the Arduino IDE (its README's documented method) or
+  PlatformIO, setting **Partition Scheme → "Minimal SPIFFS"** either
+  way (the firmware exceeds the default app partition size):
+  ```bash
+  pio run -t upload
+  ```
+  (Container-based, the same pattern as this project's sibling MotoCAN
+  firmware repo: build a PlatformIO image, mount the firmware checkout,
+  `pio run -t upload` with the board connected via USB.)
+
+Either way, first boot creates its own WiFi access point — default SSID
+`ESP32RETSSID` (or `A0RETSSID` on some boards), default WPA2 password
+`aBigSecret`. This is enough to connect immediately without any
+configuration: join that AP from your phone, the device is reachable
+at `192.168.4.1` (ESP32 SoftAP default).
+
+Also worth knowing about, not needed for this app: collin80 himself
+already built almost exactly this idea —
+<https://github.com/collin80/PhoneCANLogger>, "Grabs traffic from
+ESP32RET devices and stores the CAN frames to your phone/tablet". Not
+investigated further here (SavvyDroid wasn't built from or compared
+against it), but worth a look if you want to see how the original
+author approached the same problem.
 
 ## WiFi configuration via the serial console
 
@@ -115,7 +139,7 @@ one).
 
 ## Connecting the app
 
-1. Make sure your phone and the ESP32S3RET are on the same WiFi network
+1. Make sure your phone and the ESP32 device are on the same WiFi network
    (either your phone joined the ESP's own AP, or the ESP joined your
    phone's hotspot / home WiFi — either direction, see above).
 2. Open SavvyDroid. If a beacon is heard, its address appears under
