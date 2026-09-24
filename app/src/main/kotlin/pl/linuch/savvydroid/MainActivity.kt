@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 import pl.linuch.savvydroid.capture.CaptureService
 import pl.linuch.savvydroid.databinding.ActivityMainBinding
 import pl.linuch.savvydroid.gvret.ConnectionState
-import pl.linuch.savvydroid.gvret.DeviceDiscovery
 
 class MainActivity : AppCompatActivity() {
 
@@ -63,7 +62,6 @@ class MainActivity : AppCompatActivity() {
 
         requestNotificationPermissionIfNeeded()
         startAndBindService()
-        observeDiscovery()
     }
 
     override fun onDestroy() {
@@ -97,7 +95,7 @@ class MainActivity : AppCompatActivity() {
             if (host.isEmpty()) return
             svc.connect(host)
         } else {
-            svc.disconnect()
+            svc.userDisconnect()
         }
     }
 
@@ -147,6 +145,23 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                svc.discoveredHosts.collect { hosts ->
+                    binding.discoveredText.text = if (hosts.isEmpty()) "" else "Discovered: ${hosts.joinToString(", ")}"
+                }
+            }
+        }
+
+        // Show the address an automatic connection used, without overwriting anything the user typed.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                svc.currentHost.collect { host ->
+                    if (host != null && binding.ipInput.text.isNullOrBlank()) binding.ipInput.setText(host)
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 svc.liveRows.collect { rows -> adapter.submitList(rows) }
             }
         }
@@ -167,19 +182,6 @@ class MainActivity : AppCompatActivity() {
                         getString(R.string.recording_time_format, formatElapsed(stats.recordingElapsedMs))
                     } else {
                         ""
-                    }
-                }
-            }
-        }
-    }
-
-    private fun observeDiscovery() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                val found = LinkedHashSet<String>()
-                DeviceDiscovery().listen().collect { addr ->
-                    if (found.add(addr.hostAddress ?: addr.toString())) {
-                        binding.discoveredText.text = "Discovered: ${found.joinToString(", ")}"
                     }
                 }
             }

@@ -19,7 +19,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,8 +32,10 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import pl.linuch.savvydroid.MainActivity
 import pl.linuch.savvydroid.R
+import pl.linuch.savvydroid.gvret.AutoConnectPolicy
 import pl.linuch.savvydroid.gvret.ConnectionState
 import pl.linuch.savvydroid.gvret.CsvWriter
+import pl.linuch.savvydroid.gvret.DeviceDiscovery
 import pl.linuch.savvydroid.gvret.GvretClient
 import pl.linuch.savvydroid.gvret.GvretCommands
 import pl.linuch.savvydroid.gvret.GvretEvent
@@ -66,6 +71,17 @@ class CaptureService : LifecycleService() {
     private var reconnectingClient: ReconnectingGvretClient? = null
     private var connectionJob: Job? = null
 
+    // Auto-connect: the service keeps listening for the device's UDP beacon
+    // for as long as it runs (screen off included) and connects on its own.
+    private val autoConnect = AutoConnectPolicy()
+    private var discoveryJob: Job? = null
+
+    private val _discoveredHosts = MutableStateFlow<Set<String>>(emptySet())
+    val discoveredHosts: StateFlow<Set<String>> = _discoveredHosts.asStateFlow()
+
+    private val _currentHost = MutableStateFlow<String?>(null)
+    val currentHost: StateFlow<String?> = _currentHost.asStateFlow()
+
     // Recording state -- CSV rows go through a channel to a single
     // writer coroutine so the event-collector coroutine never blocks on
     // file I/O and there's exactly one writer, no shared-buffer races.
@@ -81,6 +97,7 @@ class CaptureService : LifecycleService() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
+        startDiscovery()
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -90,8 +107,43 @@ class CaptureService : LifecycleService() {
 
     // -- Connection ------------------------------------------------------
 
+    /** Listens for the device beacon forever; connects by itself when idle. */
+    private fun startDiscovery() {
+        discoveryJob = lifecycleScope.launch {
+            while (isActive) {
+                try {
+                    DeviceDiscovery().listen().collect { addr ->
+                        onDeviceDiscovered(addr.hostAddress ?: addr.toString())
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Socket error (e.g. the Wi-Fi network changed): just listen again.
+                }
+                delay(2000)
+            }
+        }
+    }
+
+    private fun onDeviceDiscovered(host: String) {
+        _discoveredHosts.value = _discoveredHosts.value + host
+        // reconnectingClient != null means a connection attempt is already owned by
+        // connect(); its state flow can briefly still read Disconnected at the start.
+        if (reconnectingClient == null && autoConnect.shouldConnect(_connectionState.value)) {
+            connect(host)
+        }
+    }
+
+    /** The user pressed Disconnect: stay disconnected until they connect again. */
+    fun userDisconnect() {
+        autoConnect.onUserDisconnect()
+        disconnect()
+    }
+
     fun connect(host: String, busSpeed: GvretCommands.BusSpeed = GvretCommands.BusSpeed.SPEED_500K) {
         disconnect()
+        autoConnect.onUserConnect()
+        _currentHost.value = host
         val client = ReconnectingGvretClient(clientFactory = { GvretClient(host = host, busSpeed = busSpeed) })
         reconnectingClient = client
 
@@ -261,6 +313,7 @@ class CaptureService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        discoveryJob?.cancel()
         disconnect()
         super.onDestroy()
     }
