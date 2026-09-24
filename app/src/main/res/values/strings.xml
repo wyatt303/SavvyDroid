@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">SavvyDroid</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="start_recording">Start recording</string>
+    <string name="stop_recording">Stop recording</string>
+    <string name="marker">MARKER</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="manual_ip_hint">Device IP address</string>
+    <string name="fps_format">%1$d fps</string>
+    <string name="dropped_format">%1$d dropped</string>
+    <string name="recording_time_format">%1$s recording</string>
+</resources>
