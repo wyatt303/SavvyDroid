@@ -1,0 +1,89 @@
+diff --git a/platformio.ini b/platformio.ini
+index f895943..c373dbe 100644
+--- a/platformio.ini
++++ b/platformio.ini
+@@ -20,4 +20,18 @@ lib_extra_dirs = ~/Arduino/libraries
+ board_build.partitions = app_s3.csv
+ board = esp32-s3-devkitc-1
+ ;enable max debugging and set so that Serial is the USB port and automatically started on boot
+-build_flags = -DCORE_DEBUG_LEVEL=5 -D ARDUINO_USB_MODE=1 -D ARDUINO_USB_CDC_ON_BOOT=1
+\ No newline at end of file
++build_flags = -DCORE_DEBUG_LEVEL=5 -D ARDUINO_USB_MODE=1 -D ARDUINO_USB_CDC_ON_BOOT=1
++
++
++[env:seeed_xiao_esp32s3]
++;Seeed XIAO ESP32-S3, wired per this project's sibling repo
++;DucatiMonster937CanBus's board convention -- see systemType==4 in
++;ESP32RET.cpp and SavvyDroid's docs/PROTOCOL.md for the reasoning.
++;-D SAVVYDROID_XIAO_ESP32S3 is what selects that systemType by default.
++platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.34/platform-espressif32.zip
++framework = arduino
++lib_extra_dirs = ~/Arduino/libraries
++
++board_build.partitions = app_s3.csv
++board = seeed_xiao_esp32s3
++build_flags = -DCORE_DEBUG_LEVEL=5 -D ARDUINO_USB_MODE=1 -D ARDUINO_USB_CDC_ON_BOOT=1 -D SAVVYDROID_XIAO_ESP32S3
+\ No newline at end of file
+diff --git a/src/ESP32RET.cpp b/src/ESP32RET.cpp
+index 3b60e25..3369113 100644
+--- a/src/ESP32RET.cpp
++++ b/src/ESP32RET.cpp
+@@ -97,6 +97,9 @@ void loadSettings()
+     uint8_t defaultVal = (espChipRevision > 2) ? 0 : 1; //0 = A0, 1 = EVTV ESP32
+ #ifdef CONFIG_IDF_TARGET_ESP32S3
+     defaultVal = 3;
++#endif
++#ifdef SAVVYDROID_XIAO_ESP32S3
++    defaultVal = 4; // Seeed XIAO ESP32-S3, wired per DucatiMonster937CanBus's board convention -- see systemType==4 below
+ #endif
+     settings.systemType = nvPrefs.getUChar("systype", defaultVal);
+ 
+@@ -239,6 +242,48 @@ void loadSettings()
+         strcpy(otaFilename, "/esp32s3ret.bin");
+     }
+ 
++    if (settings.systemType == 4)
++    {
++        // Seeed XIAO ESP32-S3, wired the same way as this project's sibling
++        // repo DucatiMonster937CanBus (see its firmware/include/config.h):
++        // a passive CAN logger, deliberately never driving the real
++        // transceiver TXD pin from the TWAI peripheral. D0/GPIO1 is wired
++        // to the transceiver's TXD but is held statically HIGH (recessive)
++        // as a plain GPIO -- it is NOT connected to TWAI at all. TWAI's own
++        // TX is instead routed to D3/GPIO4, which is physically
++        // unconnected on this board (confirmed against
++        // DucatiMonster937CanBus's own comment for the same pin/board).
++        // This is a second, physical safety layer on top of whatever
++        // listen-only mode SavvyDroid's SETUP_CANBUS command configures at
++        // runtime -- see docs/PROTOCOL.md in the SavvyDroid repo for why
++        // that command's exact byte layout is the one part of this project
++        // not yet independently verified against source.
++        Logger::console("Running on Seeed XIAO ESP32-S3 (SavvyDroid wiring)");
++        canBuses[0] = &CAN0;
++        SysSettings.LED_CANTX = 255;
++        SysSettings.LED_CANRX = 255;
++        SysSettings.LED_LOGGING = 255;
++        SysSettings.LED_CONNECTION_STATUS = 255;
++        SysSettings.fancyLED = false;
++        SysSettings.logToggle = false;
++        SysSettings.txToggle = true;
++        SysSettings.rxToggle = true;
++        SysSettings.lawicelAutoPoll = false;
++        SysSettings.lawicelMode = false;
++        SysSettings.lawicellExtendedMode = false;
++        SysSettings.lawicelTimestamping = false;
++        SysSettings.numBuses = 1;
++        SysSettings.isWifiActive = false;
++        SysSettings.isWifiConnected = false;
++        strcpy(deviceName, EVTV_NAME);
++        strcpy(otaHost, "media3.evtv.me");
++        strcpy(otaFilename, "/esp32s3ret.bin");
++
++        pinMode(GPIO_NUM_1, OUTPUT);
++        digitalWrite(GPIO_NUM_1, HIGH); // D0: hold transceiver TXD recessive, NOT driven by TWAI
++        CAN0.setCANPins(GPIO_NUM_2, GPIO_NUM_4); // rx=D1/GPIO2 (real transceiver RXD), tx=D3/GPIO4 (dummy, unconnected)
++    }
++
+     if (nvPrefs.getString("SSID", settings.SSID, 32) == 0)
+     {
+         strcpy(settings.SSID, deviceName);

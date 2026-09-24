@@ -35,6 +35,55 @@ introduced) and confirmed it builds clean there. Pin stays until either
 upstream ESP32RET renames its macro or FastLED renames that enum
 member — whichever happens first.
 
+## Board-specific patches (`patches/`)
+
+`ESP32RET/` stays pinned exactly to upstream `collin80/ESP32RET` — any
+board-specific customization we need lives as a **patch file** in
+`firmware/patches/`, applied on top, rather than as a commit inside the
+submodule. That's deliberate, not incidental: a commit made inside the
+submodule would only exist in whichever local checkout made it — it has
+to exist on the submodule's own configured remote (upstream
+`collin80/ESP32RET`, which we don't have push access to) for anyone
+else's `git submodule update` to fetch it. A patch tracked in the
+SavvyDroid repo itself works for everyone who clones this repo.
+
+Apply before building:
+```bash
+firmware/patches/apply.sh
+```
+Idempotent — safe to run again if already applied. Reversible with
+`git -C firmware/ESP32RET checkout -- .` (discards the patch, back to
+the pristine pinned commit).
+
+**`0001-seeed-xiao-esp32s3-dummy-tx-pin.patch`**: adds a
+`[env:seeed_xiao_esp32s3]` PlatformIO environment and a new
+`systemType == 4` in `ESP32RET.cpp` (deliberately a new number, not a
+change to the existing `systemType == 3` "EVTV ESP32-S3 Board" path,
+which stays untouched). Wires CAN the same way this project's sibling
+repo `DucatiMonster937CanBus` does on the same board (see its
+`firmware/include/config.h`): D1/GPIO2 is the real transceiver RXD, but
+D0/GPIO1 — physically wired to the transceiver's TXD — is held
+statically HIGH as a plain GPIO, never connected to the TWAI
+peripheral at all; TWAI's own TX is instead routed to D3/GPIO4, which
+is physically unconnected on this board. This is a second, physical
+safety layer independent of whatever `TWAI_MODE_LISTEN_ONLY` (a real
+hardware guarantee per Espressif's own driver header: "will not
+influence the bus — no transmissions or acknowledgments") the
+`SETUP_CANBUS` command configures at runtime — worth having since that
+command's exact byte layout is the one part of the GVRET protocol
+`docs/PROTOCOL.md` flags as not yet independently verified.
+
+Verified: builds clean with the patch applied (`pio run -e
+seeed_xiao_esp32s3`), and `stable`/`stable-s3` still build clean
+afterward too (this patch only adds new code paths gated behind
+`-D SAVVYDROID_XIAO_ESP32S3`, doesn't touch existing ones). **Not
+verified**: actually flashed and run on real XIAO ESP32-S3 hardware —
+compiling clean confirms the source is correct, not that the wiring is
+right on a real board. Confirm your own board's D0/D1 label-to-GPIO
+mapping matches before trusting this blindly, especially if using a
+different XIAO variant or a different transceiver board than
+DucatiMonster937CanBus's.
+
 ## Building
 
 Self-contained — the `Containerfile` here needs nothing from this
@@ -53,6 +102,13 @@ podman run --rm --entrypoint pio -e HOME=/workspace/firmware \
 podman run --rm --entrypoint pio -e HOME=/workspace/firmware \
   -v "$PWD:/workspace:Z" -v savvydroid-firmware-data:/root/.platformio:Z \
   -w /workspace/firmware/ESP32RET savvydroid-firmware:latest run -e stable-s3
+
+# Seeed XIAO ESP32-S3 with DucatiMonster937CanBus-style wiring -- apply
+# the patch first (see "Board-specific patches" above):
+firmware/patches/apply.sh
+podman run --rm --entrypoint pio -e HOME=/workspace/firmware \
+  -v "$PWD:/workspace:Z" -v savvydroid-firmware-data:/root/.platformio:Z \
+  -w /workspace/firmware/ESP32RET savvydroid-firmware:latest run -e seeed_xiao_esp32s3
 ```
 
 The `-e HOME=/workspace/firmware` is what makes `~/Arduino/libraries`
@@ -77,8 +133,9 @@ built image, no pre-warmed cache, each as its own `pio run` invocation
 per the note above):
 
 ```
-stable       SUCCESS  Flash: 96.4% (1894437 / 1966080 bytes), RAM: 22.5%
-stable-s3    SUCCESS  Flash: 42.8% (1347343 / 3145728 bytes), RAM: 19.3%
+stable               SUCCESS  Flash: 96.4% (1894437 / 1966080 bytes), RAM: 22.5%
+stable-s3            SUCCESS  Flash: 42.8% (1347343 / 3145728 bytes), RAM: 19.3%
+seeed_xiao_esp32s3   SUCCESS  Flash: 42.6% (1341135 / 3145728 bytes), RAM: 19.5%  (with patch applied)
 ```
 
 Output binaries land in `ESP32RET/.pio/build/<env>/firmware.bin`
