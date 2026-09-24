@@ -153,35 +153,37 @@ never set bits above bit 10, so the mask is safe either way).
 
 Sent once after the binary-mode handshake to configure the bus this MVP
 cares about. (Source: `gvretserial.cpp` command ID table — ID 5 =
-"CAN bus setup, no reply" — and `gvret_comm.cpp`'s `SETUP_CANBUS` state.)
-Exact byte layout for the speed+listen-only fields was not indepedently
-re-derived byte-by-byte from source for this MVP (the SETUP_CANBUS state
-machine in `gvret_comm.cpp` was not fully quoted during research); rather
-than guess bytes, **SavvyDroid's `GvretClient` isolates this command
-behind a single `buildSetupCanBusCommand()` function** so the exact byte
-layout can be corrected in one place once verified against real ESP32RET
-hardware / a fresh read of `gvret_comm.cpp`'s `SETUP_CANBUS` case,
-without touching the parser or anything else. Placeholder layout used
-until then (best-effort, modeled on the SavvyCAN UI's known bus-speed
-list and the single-bus MVP scope):
+"CAN bus setup, no reply" — and `gvret_comm.cpp`'s `SETUP_CANBUS` state,
+read directly.)
+
+Layout, **verified against `gvret_comm.cpp`** (and the app now sends
+exactly this): after the `0xF1 0x05` prefix, two little-endian `uint32`
+words, one per bus (bus 0 then bus 1), 10 bytes in total:
 
 ```
-offset  size  field
-0       1     command id (= 0x05)
-1       4     bus 0 speed, little-endian, bits (top bit = bus enabled,
-              next bit = listen-only, low 29ish bits = speed in bps)
-5       4     bus 1 speed, little-endian (unused bus, sent as 0 = disabled)
+bits 0..19   speed in bps (the firmware masks with 0xFFFFF, caps at 1 000 000)
+bit  29      listen-only        (only read if bit 31 is set)
+bit  30      bus enabled        (only read if bit 31 is set)
+bit  31      "enabled / listen-only bits are present"; without it the firmware
+             just enables the bus and ignores listen-only
 ```
 
-**This layout is the one part of this doc explicitly flagged
-NOT-YET-VERIFIED against source** — do not trust it the way the rest of
-this document has been cross-checked. Verify against real hardware
-before relying on bus configuration actually taking effect; the frame
-receive/parse path (the part that matters for the MVP's core "capture
-and save a file SavvyCAN can open" goal) does not depend on this command
-succeeding, since ESP32RET streams whatever the bus is already
-configured to (including any prior configuration set via its own serial
-console) even if this command is silently ignored.
+A word of `0` disables that bus. SavvyDroid sends bus 0 as
+`0xE0000000 | 500000` (listen-only) and bus 1 as `0`.
+
+History: an earlier version of this app put listen-only on bit 31, which the
+firmware reads as "extended status present", so the bus was configured **not**
+listen-only. Fixed after reading the firmware source.
+
+Firmware crash found on the way: the handler ends by disabling bus 1 with
+`canBuses[1]->disable()`. On a board that only populates `canBuses[0]` (the
+single-bus XIAO ESP32-S3 build) that is a null-pointer call, which panics the
+chip (`Guru Meditation Error: LoadProhibited`, `EXCVADDR: 0x00000000`). Every
+connect therefore rebooted the ESP32, restarted its Wi-Fi AP and dropped the
+phone (`reason=6`), about every 34 s with the app's 30 s reconnect backoff.
+Fixed by `firmware/patches/0002-gvret-setup-canbus-null-bus-guard.patch`,
+which null-checks `canBuses[]` in that handler. The firmware has to be
+rebuilt and reflashed for the app to stay connected.
 
 ## Command 9 — comm validation / keepalive
 

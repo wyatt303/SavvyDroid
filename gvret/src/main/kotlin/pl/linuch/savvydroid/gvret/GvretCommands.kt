@@ -20,15 +20,19 @@ object GvretCommands {
      * Command 5 (SETUP_CANBUS): configure bus 0's speed and listen-only
      * mode; bus 1 is sent disabled (this app is single-bus for MVP).
      *
-     * NOT-YET-VERIFIED against source (see docs/PROTOCOL.md) — deliberately
-     * isolated in this one function so the byte layout can be corrected
-     * later without touching the parser, connection layer, or anything
-     * downstream of it.
+     * Layout verified against ESP32RET's `gvret_comm.cpp` `SETUP_CANBUS`
+     * state: each bus is a little-endian uint32 where the low 20 bits are
+     * the speed in bps, bit 31 says "the enabled/listen-only bits below
+     * are present" (without it the firmware just enables the bus and
+     * ignores listen-only), bit 30 = bus enabled, bit 29 = listen-only.
+     * (An earlier version put listen-only on bit 31, which the firmware
+     * read as "extended status present" -- so listen-only was never set.)
      */
     fun setupCanBus(speed: BusSpeed, listenOnly: Boolean): ByteArray {
-        var bus0 = speed.bps.toUInt() and 0x1FFFFFFFu
-        if (listenOnly) bus0 = bus0 or (1u shl 31)
+        var bus0 = speed.bps.toUInt() and 0xFFFFFu
+        bus0 = bus0 or (1u shl 31) // enabled/listen-only bits are present
         bus0 = bus0 or (1u shl 30) // bus enabled
+        if (listenOnly) bus0 = bus0 or (1u shl 29)
 
         val out = ByteArray(2 + 4 + 4)
         out[0] = 0xF1.toByte()

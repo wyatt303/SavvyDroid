@@ -23,6 +23,31 @@ class GvretCommandsTest {
         assertEquals(0x05.toByte(), bytes[1])
     }
 
+    private fun bus0Word(bytes: ByteArray): UInt =
+        (0 until 4).fold(0u) { acc, i -> acc or ((bytes[2 + i].toUInt() and 0xFFu) shl (8 * i)) }
+
+    // Bit layout as read by ESP32RET's gvret_comm.cpp SETUP_CANBUS:
+    // bit31 = extended status present, bit30 = enabled, bit29 = listen-only, low 20 bits = speed.
+    @Test
+    fun `setup canbus 500k listen-only sets bits 31 30 29 and the speed`() {
+        val word = bus0Word(GvretCommands.setupCanBus(GvretCommands.BusSpeed.SPEED_500K, listenOnly = true))
+        assertEquals(0xE0000000u or 500_000u, word)
+    }
+
+    @Test
+    fun `setup canbus without listen-only leaves bit 29 clear`() {
+        val word = bus0Word(GvretCommands.setupCanBus(GvretCommands.BusSpeed.SPEED_500K, listenOnly = false))
+        assertEquals(0xC0000000u or 500_000u, word)
+    }
+
+    @Test
+    fun `setup canbus speeds fit the firmware's 20-bit speed field`() {
+        for (speed in GvretCommands.BusSpeed.values()) {
+            val word = bus0Word(GvretCommands.setupCanBus(speed, listenOnly = true))
+            assertEquals(speed.bps.toUInt(), word and 0xFFFFFu)
+        }
+    }
+
     @Test
     fun `setup canbus bus1 field is always disabled (all zero)`() {
         val bytes = GvretCommands.setupCanBus(GvretCommands.BusSpeed.SPEED_125K, listenOnly = false)

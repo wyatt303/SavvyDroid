@@ -84,6 +84,17 @@ mapping matches before trusting this blindly, especially if using a
 different XIAO variant or a different transceiver board than
 DucatiMonster937CanBus's.
 
+**`0002-gvret-setup-canbus-null-bus-guard.patch`**: null-checks
+`canBuses[]` in `gvret_comm.cpp`'s `SETUP_CANBUS` handler (and before the
+send-frame call). `canBuses[]` is initialised to `nullptr` and boards only
+populate the buses they have; the handler ended with an unconditional
+`canBuses[1]->disable()`, which on the single-bus XIAO build is a null call
+and panics the chip (`LoadProhibited`, `EXCVADDR: 0x00000000`). The ESP32
+rebooted on every SETUP_CANBUS, i.e. on every app connect, restarting its
+Wi-Fi AP and dropping the phone. Confirmed on hardware from the serial log,
+and confirmed fixed: after reflashing, the app stays connected. Needed for
+any single-bus board, not just this one.
+
 ## Building
 
 Self-contained — the `Containerfile` here needs nothing from this

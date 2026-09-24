@@ -35,14 +35,12 @@ actual ESP32). Treat the UI and foreground-service wiring as
 compile-verified only until someone runs it on a phone against real
 firmware.
 
-One specific known gap, flagged in `docs/PROTOCOL.md`: the exact byte
-layout of the `SETUP_CANBUS` command (bus speed + listen-only) was not
-independently re-derived from firmware source for this MVP — it's
-isolated behind `GvretCommands.setupCanBus()` so it can be corrected in
-one place. Until verified, the app may fail to actually configure the
-bus even though the frame *parsing* path (the part that matters for
-"capture and save a file SavvyCAN can open") works regardless, since
-ESP32RET streams whatever the bus is already configured to.
+The `SETUP_CANBUS` command's byte layout used to be an unverified guess;
+it has since been checked against the firmware source and fixed (listen-only
+is bit 29, not bit 31). Reading that handler also exposed a firmware crash on
+single-bus boards, fixed by `firmware/patches/0002-*.patch` — details in
+`docs/PROTOCOL.md`. Checked on real hardware with a phone and a XIAO
+ESP32-S3: the app reaches "Connected" and holds the connection.
 
 ## Building & testing
 
