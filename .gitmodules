@@ -1,0 +1,15 @@
+[submodule "firmware/ESP32RET"]
+	path = firmware/ESP32RET
+	url = https://github.com/collin80/ESP32RET.git
+[submodule "firmware/Arduino/libraries/esp32_can"]
+	path = firmware/Arduino/libraries/esp32_can
+	url = https://github.com/collin80/esp32_can.git
+[submodule "firmware/Arduino/libraries/esp32_mcp2517fd"]
+	path = firmware/Arduino/libraries/esp32_mcp2517fd
+	url = https://github.com/collin80/esp32_mcp2517fd.git
+[submodule "firmware/Arduino/libraries/can_common"]
+	path = firmware/Arduino/libraries/can_common
+	url = https://github.com/collin80/can_common.git
+[submodule "firmware/Arduino/libraries/FastLED"]
+	path = firmware/Arduino/libraries/FastLED
+	url = https://github.com/FastLED/FastLED.git

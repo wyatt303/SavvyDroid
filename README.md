@@ -70,35 +70,45 @@ The debug APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Flashing an ESP32 GVRET device
 
-Correction from an earlier draft of this README: there is no
-`collin80/ESP32S3RET` repo — that URL 404s. "ESP32S3RET" is a
-community fork, not an official collin80 project. Two real options,
-depending on your hardware:
+**The firmware source is now vendored in this repo** —
+`firmware/ESP32RET/` (a git submodule pinned to upstream
+`collin80/ESP32RET`), along with its three build-dependency libraries
+and a pinned copy of FastLED. See `firmware/README.md` for the full
+story, including a build-breaking `FastLED` version incompatibility
+that was found and fixed (pinned) in this session. Clone with
+`git clone --recurse-submodules`, or `git submodule update --init
+--recursive` on an existing checkout.
 
-- **Plain ESP32 (e.g. EVTV ESP32Due, Macchina A0)**: firmware source
-  <https://github.com/collin80/ESP32RET> (`docs/PROTOCOL.md` was
-  reverse-engineered from this repo's source directly). The easiest
-  path for this board is the **official precompiled flasher**:
-  <https://www.savvycan.com/ESP32RET_Updater.zip> — a zip with the
-  firmware `.bin`s already built plus `updater.command`/`updater.bat`,
-  no PlatformIO/Arduino toolchain needed at all. Confirmed live (7.8MB,
-  contains `ESP32RET.bin`, `bootloader_qio_80m.bin`, `partitions.bin`,
-  and the updater scripts) — also linked from savvycan.com's own
-  downloads section.
-- **ESP32-S3 boards**: use the community fork
-  <https://github.com/MagnusThome/ESP32S3RET> instead — same GVRET
-  protocol/config commands as upstream, but with classic Bluetooth
-  removed (the S3 chip only has BLE) and FastLED disabled (compile
-  issue on S3). No precompiled binary for this one; build/flash it
-  yourself with the Arduino IDE (its README's documented method) or
-  PlatformIO, setting **Partition Scheme → "Minimal SPIFFS"** either
-  way (the firmware exceeds the default app partition size):
-  ```bash
-  pio run -t upload
-  ```
-  (Container-based, the same pattern as this project's sibling MotoCAN
-  firmware repo: build a PlatformIO image, mount the firmware checkout,
-  `pio run -t upload` with the board connected via USB.)
+Second correction to an earlier draft of this README: I'd previously
+written that ESP32-S3 needs a separate community fork
+(`MagnusThome/ESP32S3RET`), because that fork's own README frames
+itself that way. Checking upstream's actual current source shows that's
+now **out of date** — `collin80/ESP32RET`'s `platformio.ini` has a
+native `env:stable-s3` target (`board = esp32-s3-devkitc-1`), and
+`src/ESP32RET.cpp`/`ELM327_Emulator.*` already have
+`#ifdef CONFIG_IDF_TARGET_ESP32S3` branches handling the chip
+difference. Built and verified in this session:
+
+```bash
+podman build -f firmware/Containerfile -t savvydroid-firmware:latest firmware/
+podman run --rm --entrypoint pio -e HOME=/workspace/firmware \
+  -v "$PWD:/workspace:Z" -v savvydroid-firmware-data:/root/.platformio:Z \
+  -w /workspace/firmware/ESP32RET savvydroid-firmware:latest run -e stable      # plain ESP32
+# ... -e stable-s3   # ESP32-S3 -- same command, no fork needed
+```
+
+Both environments compiled clean (see `firmware/README.md` for the
+exact flash/RAM numbers). The MagnusThome fork may still be worth
+knowing about for boards upstream doesn't target directly, but it is
+**not** required for S3 support in general anymore.
+
+For a plain ESP32 (EVTV ESP32Due, Macchina A0, ...) there's also an
+**official precompiled flasher**, no toolchain needed at all:
+<https://www.savvycan.com/ESP32RET_Updater.zip> — confirmed live
+(7.8MB, contains `ESP32RET.bin`, `bootloader_qio_80m.bin`,
+`partitions.bin`, and `updater.command`/`updater.bat`), also linked
+from savvycan.com's own downloads section. No equivalent precompiled
+binary exists for S3 — build it from `firmware/ESP32RET/` as above.
 
 Either way, first boot creates its own WiFi access point — default SSID
 `ESP32RETSSID` (or `A0RETSSID` on some boards), default WPA2 password

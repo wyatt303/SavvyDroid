@@ -1,0 +1,11 @@
+# Build environment for firmware/ESP32RET (a git submodule, upstream
+# collin80/ESP32RET) -- self-contained so this repo doesn't depend on
+# some other project's local image. See firmware/README.md.
+FROM docker.io/library/python:3.12-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir platformio
+
+ENTRYPOINT ["pio"]

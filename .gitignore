@@ -6,3 +6,9 @@ local.properties
 *.iml
 .DS_Store
 /captures/
+
+# Created under firmware/ because builds run with HOME=/workspace/firmware
+# (see firmware/README.md) so PlatformIO's ~/.platformio resolves there.
+/firmware/.platformio/
+/firmware/.cache/
+

@@ -2,9 +2,13 @@
 
 This is the exact wire format SavvyDroid's parser implements, extracted
 from the two projects that define the protocol in practice (there is no
-independent spec document — the code IS the spec):
+independent spec document — the code IS the spec). The firmware is now
+vendored in this repo (`firmware/ESP32RET/`, a git submodule pinned to
+upstream `collin80/ESP32RET`, commit `ae857ea9`) — see `firmware/README.md`
+for how it's built and verified. The paths below are relative to that
+submodule.
 
-- **Firmware (device/server) side**: `collin80/ESP32RET`
+- **Firmware (device/server) side**: `firmware/ESP32RET/` (`collin80/ESP32RET`)
   - `src/commbuffer.cpp` — `CommBuffer::sendFrameToBuffer()`, the function
     that serializes an inbound CAN frame onto the wire. This is the
     authoritative source for what SavvyDroid receives.
